@@ -1,0 +1,8 @@
+# HOST tests only (plain gcc). The calculator build uses ./Makefile with CEdev.
+CORE = src/physics.c src/level.c src/save.c src/upgrades.c src/abilities.c src/animation.c src/game.c src/assets.c \
+       host/pack_host.c host/pack_core.c host/pack_levels.c
+.PHONY: test gen
+test: gen
+	gcc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -o /tmp/abyss_tests tests/test_main.c $(CORE) && /tmp/abyss_tests
+gen:
+	python3 tools/mkassets.py && python3 tools/mklevels.py
