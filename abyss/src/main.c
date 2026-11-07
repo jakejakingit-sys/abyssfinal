@@ -25,10 +25,15 @@ static const char *const LEVEL_NAMES[LEVEL_COUNT] = {
 
 static int camx, shake;
 static uint16_t anim_tick, fx_rng = 0xBEEF;
+static uint32_t frame_elapsed;
 
 /* ================= basics ================= */
 static uint16_t rnd(void) { fx_rng ^= fx_rng << 7; fx_rng ^= fx_rng >> 9; fx_rng ^= fx_rng << 8; return fx_rng; }
-static void frame_wait(void) { while (timer_Get(1) < FRAME_TICKS) { } timer_Set(1, 0); }
+static void frame_wait(void) {
+  while (timer_Get(1) < FRAME_TICKS) { }
+  frame_elapsed = timer_Get(1);
+  timer_Set(1, 0);
+}
 static void present(void) { frame_wait(); gfx_SwapDraw(); anim_tick++; }
 static bool edge(bool now, bool *prev) { bool r = now && !*prev; *prev = now; return r; }
 static Input read_input(void) {
@@ -51,7 +56,7 @@ static int popcount32(uint32_t v) { int n = 0; while (v) { n += v & 1; v >>= 1; 
 
 /* ================= palette: per-world themes + fades ================= */
 static uint8_t cur_pal[32][3];
-static void apply_palette(int f) {                  /* f = 0 (black) .. 16 (full) */
+static void apply_palette(int f) {
   static uint16_t p16[32];
   for (int i = 0; i < 32; i++) p16[i] = gfx_RGBTo1555(cur_pal[i][0] * f / 16, cur_pal[i][1] * f / 16, cur_pal[i][2] * f / 16);
   gfx_SetPalette(p16, sizeof p16, 0);
@@ -66,7 +71,7 @@ static void fade_in(void) { for (int f = 0; f <= 16; f += 2) { apply_palette(f);
 static void fade_out(void) { for (int f = 16; f >= 0; f -= 2) { apply_palette(f); frame_wait(); } }
 
 /* ================= particles ================= */
-typedef struct { int16_t x, y, vx, vy; uint8_t life, col, sz, grav; } Part;   /* positions in 1/4 px */
+typedef struct { int16_t x, y, vx, vy; uint8_t life, col, sz, grav; } Part;
 static Part parts[56];
 static void spawn(int px, int py, int vx4, int vy4, int life, int col, int sz, int grav) {
   for (int i = 0; i < 56; i++) if (!parts[i].life) { parts[i] = (Part){px * 4, py * 4, vx4, vy4, life, col, sz, grav}; return; }
@@ -88,12 +93,12 @@ static void parts_clear(void) { for (int i = 0; i < 56; i++) parts[i].life = 0; 
 static void draw_background(int cam) {
   gfx_FillScreen(C_BG1);
   gfx_SetColor(C_BG2); gfx_FillRectangle(0, 60, 320, 180);
-  for (int i = -1; i < 4; i++) tsp(SPR_BG_ARCH, i * 130 - (cam / 6) % 130, 128);            /* far: arches, slow parallax */
-  for (int i = -1; i < 5; i++) {                                                             /* near: pillars + hanging chains */
+  for (int i = -1; i < 4; i++) tsp(SPR_BG_ARCH, i * 130 - (cam / 6) % 130, 128);
+  for (int i = -1; i < 5; i++) {
     int x = i * 96 - (cam / 3) % 96; tsp(SPR_BG_PILLAR, x, 112);
     if (((i + cam / 288) & 1) == 0) tsp(SPR_BG_CHAIN, x + 54, 14);
   }
-  gfx_SetColor(C_BG3); for (int y = 196; y < 240; y += 2) gfx_HorizLine(0, y, 320);          /* ground fog (dithered bands) */
+  gfx_SetColor(C_BG3); for (int y = 196; y < 240; y += 2) gfx_HorizLine(0, y, 320);
   gfx_SetColor(C_BG1); gfx_FillRectangle(0, 0, 320, 12);
 }
 
@@ -101,13 +106,13 @@ static void draw_background(int cam) {
 static bool is_wall(uint8_t t) { return t == T_SOLID || t == T_GATE || t == T_CRUMBLE; }
 static void draw_tiles(const Game *g) {
   const LevelState *l = &g->ls; const LevelDef *d = l->def; int t0 = camx / TILE_PX;
-  for (int ty = 0; ty < d->h; ty++)                                      /* pass 1: torch glow under the tiles */
+  for (int ty = 0; ty < d->h; ty++)
     for (int tx = t0; tx <= t0 + 20 && tx < d->w; tx++)
       if (level_tile(l, tx, ty) == T_TORCH) {
         tsp(SPR_GLOW, tx * TILE_PX + 8 - 16 - camx, ty * TILE_PX + 4 - 16);
         if (((anim_tick + tx * 7) & 15) == 0) spawn(tx * TILE_PX + 7 + (int)(rnd() % 3), ty * TILE_PX + 2, (int)(rnd() % 3) - 1, -3, 30, C_FIRE_L, 1, 0);
       }
-  for (int ty = 0; ty < d->h; ty++)                                      /* pass 2: tiles */
+  for (int ty = 0; ty < d->h; ty++)
     for (int tx = t0; tx <= t0 + 20 && tx < d->w; tx++) {
       uint8_t t = level_tile(l, tx, ty); if (!t) continue;
       int x = tx * TILE_PX - camx, y = ty * TILE_PX, id = -1; bool opaque = false;
@@ -137,7 +142,7 @@ static void draw_tiles(const Game *g) {
       if (opaque) osp(id, x, y); else tsp(id, x, y);
     }
 }
-static int boss_t;                                           /* >0: guardian collapse animation */
+static int boss_t;
 static void draw_boss(const Game *g) {
   const LevelDef *d = g->ls.def; if (!d->boss) return;
   int base = d->boss == 1 ? SPR_KING0 : SPR_BROOD0, w = spr(base)[0];
@@ -145,7 +150,7 @@ static void draw_boss(const Game *g) {
     bool attack = false; for (int i = 0; i < MAX_BONES; i++) if (g->bone[i].on && g->bone[i].t) attack = true;
     int f = attack ? 2 : ((anim_tick / 26) & 1);
     tsp(base + f, d->w * 8 - w / 2 - camx, 18 + ((anim_tick / 13) & 1) * 2);
-  } else if (boss_t > 0) {                                   /* collapse: shudder, sink, flicker out */
+  } else if (boss_t > 0) {
     if ((boss_t / 3) & 1 || boss_t > 50) tsp(base + 2, d->w * 8 - w / 2 - camx + (int)(rnd() % 5) - 2, 18 + (90 - boss_t) / 3);
     if ((anim_tick & 3) == 0) burst(d->w * 8 + (int)(rnd() % 40) - 20, 30 + (90 - boss_t) / 3, 3, d->boss == 1 ? C_BONE : C_BROWN, 6, 40, 1, 2);
     boss_t--;
@@ -160,7 +165,7 @@ static void draw_entities(const Game *g, int pframe) {
     gfx_SetColor(C_PURPLE_D); gfx_FillRectangle(x, y, PLAT_W, 6);
     gfx_SetColor(C_PURPLE); gfx_HorizLine_NoClip(x, y, PLAT_W); gfx_SetColor(C_STONE_H);
     gfx_FillRectangle(x + 3, y + 2, 2, 2); gfx_FillRectangle(x + 15, y + 2, 2, 2); gfx_FillRectangle(x + 27, y + 2, 2, 2);
-    gfx_SetColor(C_RUNE_D); gfx_FillRectangle(x + 12, y + 6, 8, 2);                  /* hover glow */
+    gfx_SetColor(C_RUNE_D); gfx_FillRectangle(x + 12, y + 6, 8, 2);
   }
   for (int i = 0; i < g->ncr; i++) { const Crawler *c = &g->cr[i]; tsp(SPR_CRAWLER(c->dir > 0 ? 0 : 1, (anim_tick / 8) & 1), c->x - camx, c->y); }
   for (int i = 0; i < MAX_BONES; i++) {
@@ -170,7 +175,7 @@ static void draw_entities(const Game *g, int pframe) {
     } else tsp(d->boss == 2 ? SPR_SHARD : SPR_BONE, b->x - camx, b->y);
   }
   if (!(g->invuln & 4) || g->invuln < 30) tsp(SPR_PLAYER(g->p.face ? 0 : 1, pframe), g->p.x / SUBPX - 1 - camx, g->p.y / SUBPX - 2);
-  if (g->pulse_fx) {                                                       /* Rune Pulse: expanding rings */
+  if (g->pulse_fx) {
     int r = (12 - g->pulse_fx) * 6 + 6, cx = g->p.x / SUBPX + PW / 2 - camx, cy = g->p.y / SUBPX + PH / 2;
     gfx_SetColor(C_RUNE); gfx_Rectangle(cx - r, cy - r, r * 2, r * 2); gfx_SetColor(C_WHITE); gfx_Rectangle(cx - r + 2, cy - r + 2, r * 2 - 4, r * 2 - 4);
   }
@@ -186,10 +191,10 @@ static void draw_hud(const Game *g, const SaveData *s) {
   gfx_SetColor(C_CLOAK_D); gfx_FillRectangle(17, 16, 82, 5); gfx_SetColor(C_RUNE); gfx_FillRectangle(17, 16, g->energy * 82 / me, 5);
   for (int k = 1; k < me / 20; k++) { gfx_SetColor(C_OUT); gfx_VertLine_NoClip(17 + k * 20 * 82 / me, 16, 5); }
   tsp(SPR_COIN0 + ((anim_tick / 6) & 3), 258, 0); num(s->coins, 276, 4, C_GOLD);
-  bool ready = g->energy >= PULSE_COST && !g->pulse_cd;                    /* ability slot */
+  bool ready = g->energy >= PULSE_COST && !g->pulse_cd;
   tsp(ready ? SPR_PULSE_ON : SPR_PULSE_OFF, 4, 220);
   if (g->pulse_cd) { gfx_SetColor(C_BG1); gfx_FillRectangle(5, 221, 16, g->pulse_cd * 16 / PULSE_CD); }
-  if (g->ls.runes_total) {                                                 /* rune pips */
+  if (g->ls.runes_total) {
     for (int i = 0; i < g->ls.runes_total; i++) { tsp(i < g->ls.runes_on ? SPR_RUNE_ON : SPR_RUNE_OFF, 124 + i * 14 - 4, -3); }
     if (g->ls.gates_open) text("GATE OPEN", 190, 4, C_GREEN);
   }
@@ -204,7 +209,7 @@ static void render(const Game *g, const SaveData *s, int pframe) {
   int saved = camx; camx += sh; if (camx < 0) camx = 0;
   draw_background(camx); draw_tiles(g); draw_entities(g, pframe); parts_draw(camx); draw_hud(g, s);
   camx = saved;
-  if (g->tick < 120) {                                                      /* level banner */
+  if (g->tick < 120) {
     panel(50, 176, 220, 44); text_c(WORLD_NAMES[d->world - 1], 160, 181, C_STONE_H);
     text_c(d->name, 160, 194, C_GOLD); text_c(d->boss ? "GUARDIAN - light every rune!" : "Reach the exit", 160, 207, d->boss ? C_RED : C_STONE_L);
   }
@@ -244,6 +249,7 @@ static bool screen_complete(const Game *g, const SaveData *s, bool has_next) {
     present();
   }
 }
+
 /* returns true if the level was completed and the player wants the next one */
 static bool play_level(SaveData *s, int idx) {
   static Game g; game_start_level(&g, s, idx);
@@ -251,13 +257,27 @@ static bool play_level(SaveData *s, int idx) {
   bool pc = true, prev_ground = true, prev_boss = false; int prev_vy = 0, land_t = 0, ppx = 0, ppy = 0; bool prev_bone[MAX_BONES] = {0};
   timer_Set(1, 0);
   render(&g, s, FR_IDLE0); gfx_SwapDraw(); fade_in();
+  uint32_t sim_accum = 0;
+  frame_elapsed = 0;
+  timer_Set(1, 0);
   for (;;) {
     Input in = read_input();
-    if (edge(kb_Data[6] & kb_Clear, &pc)) { if (pause_menu()) { fade_out(); platform_save_write(s); return false; } timer_Set(1, 0); }
-    ppx = g.p.x / SUBPX; ppy = g.p.y / SUBPX;
-    uint8_t ev = game_update(&g, in);
+    if (edge(kb_Data[6] & kb_Clear, &pc)) {
+      if (pause_menu()) { fade_out(); platform_save_write(s); return false; }
+      sim_accum = 0; frame_elapsed = 0; timer_Set(1, 0);
+    }
+
+    sim_accum += frame_elapsed;
+    frame_elapsed = 0;
+    uint8_t ev = 0;
+    while (sim_accum >= FRAME_TICKS) {
+      ppx = g.p.x / SUBPX;
+      ppy = g.p.y / SUBPX;
+      ev |= game_update(&g, in);
+      sim_accum -= FRAME_TICKS;
+    }
+
     int fx = g.p.x / SUBPX + PW / 2, fy = g.p.y / SUBPX + PH;
-    /* ---- juice ---- */
     if (g.p.ground && (g.p.vx > 30 || g.p.vx < -30) && (g.tick % 7) == 0) spawn(fx - (g.p.vx > 0 ? 4 : -4), fy - 1, (g.p.vx > 0 ? -2 : 2), -1, 14, C_STONE_L, 2, 0);
     if (prev_ground && !g.p.ground && g.p.vy < 0) { burst(fx, fy, 5, C_STONE_L, 4, 16, 0, 2); }
     if (!prev_ground && g.p.ground && prev_vy >= 45) { land_t = 6; burst(fx, fy, 8, C_STONE_L, 6, 18, 0, 2); }
