@@ -6,14 +6,14 @@
 #define PW 10
 #define PH 14
 
-#define ACC 6
-#define FRIC 6
-#define MAXV 64
+#define ACC 5
+#define FRIC 4
+#define MAXV 56
 
-#define GRAV 9
-#define JUMPV (-90)
+#define GRAV 6
+#define JUMPV (-100)
 #define JUMPCUT (-40)
-#define MAXFALL 112
+#define MAXFALL 90
 
 #define COYOTE_F 7
 #define JBUF_F 7
