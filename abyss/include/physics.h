@@ -6,9 +6,9 @@
 #define PW 10
 #define PH 14
 
-#define ACC 5
+#define ACC 4
 #define FRIC 4
-#define MAXV 56
+#define MAXV 44
 
 #define GRAV 6
 #define JUMPV (-100)
